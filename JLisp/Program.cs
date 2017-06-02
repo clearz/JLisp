@@ -74,9 +74,9 @@ namespace JLisp
             var replEnv = new Dictionary<string, JlValue>
             {
                 ["+"] = new Plus(),
-                ["-"] = new Plus(),
-                ["*"] = new Plus(),
-                ["/"] = new Plus()
+                ["-"] = new Minus(),
+                ["*"] = new Multiply(),
+                ["/"] = new Divide()
             };
 
             string input;
