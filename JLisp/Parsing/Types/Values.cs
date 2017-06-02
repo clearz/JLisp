@@ -10,6 +10,8 @@ namespace JLisp.Parsing.Types
     public abstract class JlValue
     {
         public virtual string ToString(bool printReadably) => ToString();
+        public override string ToString() => "<unknown>";
+        public virtual bool ListQ() => false;
     }
 
     public class JlConstant : JlValue
@@ -64,6 +66,7 @@ namespace JLisp.Parsing.Types
         public JlList(params JlValue[] list ) {
             Value = new List<JlValue>(list);
         }
+        public override bool ListQ() => true;
         public override string ToString() => ToString(true);
         public override string ToString(bool printReadably) => $"{start}{Printer.Join(Value, " ", printReadably)}{end}";
 
@@ -74,6 +77,17 @@ namespace JLisp.Parsing.Types
             Value.AddRange(jvs);
             return this;
         }
+
+        public int Size() => Value.Count;
+        public JlValue Nth(int idx) => Value[idx];
+
+        public JlValue Rest()
+        {
+            if(Size() > 0) return new JlList(Value.GetRange(1, Size() -1));
+            return new JlList();
+        }
+
+
     }
 
     public class JlVector : JlList
@@ -84,6 +98,7 @@ namespace JLisp.Parsing.Types
         }
 
         public new JlVector Copy() => (JlVector)this.MemberwiseClone();
+        public override bool ListQ() => false;
     }
 
     public class JlHashMap : JlValue
@@ -104,5 +119,10 @@ namespace JLisp.Parsing.Types
                 Value.Add(value.ToString(), value);
             return this;
         }
+    }
+
+    public abstract class JlFunction : JlValue
+    {
+        public abstract JlValue Apply(JlList args);
     }
 }
