@@ -15,9 +15,9 @@ namespace JLisp
         const string PROMPT = "-> ";
         const string Heading = "JLisp v 0.0.3, By John Cleary.";
 
-        static JlValue EvalAst(JlValue ast, Dictionary<string, JlValue> env)
+        static JlValue EvalAst(JlValue ast, Env env)
         {
-            if (ast is JlSymbol sym) return env[sym.Name];
+            if (ast is JlSymbol sym) return env.Get(sym.Name);
             if (ast is JlList oldLst)
             {
                 var newLst = ast.ListQ() ? new JlList() : new JlVector();
@@ -28,10 +28,9 @@ namespace JLisp
             if (ast is JlHashMap map)
             {
                 var newDict = new Dictionary<string, JlValue>();
-                foreach (var jv in map.Value)
-                {
-                    newDict.Add(jv.Key, EVAL(jv.Value, env));
-                }
+                foreach ( var jv in map.Value )
+                    newDict.Add( jv.Key, EVAL( jv.Value, env ) );
+
                 return new JlHashMap(newDict);
             }
             return ast;
@@ -39,9 +38,9 @@ namespace JLisp
 
         static JlValue READ(string str) => Reader.ReadStr(str);
 
-        static JlValue EVAL(JlValue origAst, Dictionary<string, JlValue> env)
+        static JlValue EVAL(JlValue origAst, Env env)
         {
-            JlValue a0;
+            JlValue a0, a1, a2, res;
             if (!origAst.ListQ()) return EvalAst(origAst, env);
 
             var ast = (JlList) origAst;
@@ -49,13 +48,33 @@ namespace JLisp
             a0 = ast.Nth(0);
             if (!(a0 is JlSymbol))
                 throw new JlError($"attempt to apply on non-symbol '{Printer.PrintStr(a0, true)}'");
-
-            JlValue args = EvalAst(ast.Rest(), env);
-            JlSymbol fsym = (JlSymbol) a0;
-            var f = (JlFunction) env[fsym.Name];
-            if (f == null)
-                throw new JlError($"'{fsym.Name}' not found");
-            return f.Apply((JlList) args);
+            switch ( ((JlSymbol)a0).Name )
+            {
+                case "def!":
+                    a1 = ast.Nth( 1 );
+                    a2 = ast.Nth( 2 );
+                    res = EVAL(a2, env);
+                    env.Set( ((JlSymbol)a1).Name, res );
+                    return res;
+                case "let*":
+                    a1 = ast.Nth(1);
+                    a2 = ast.Nth(2);
+                    JlSymbol key;
+                    JlValue val;
+                    Env letEnv = new Env( env );
+                    for ( int i = 0; i < ((JlList)a1).Size(); i += 2 ) {
+                        key = (JlSymbol)((JlList)a1).Nth( i );
+                        val = ((JlList)a1).Nth( i + 1 );
+                        letEnv.Set( key.Name, EVAL( val, letEnv ) );
+                    }
+                    return EVAL( a2, letEnv );
+                default:
+                    var el = (JlList) EvalAst(ast, env);
+                    var f = (JlFunction) el.Nth( 0 );
+                    if (f == null)
+                        throw new JlError($"'{el.Nth(0)}' not found");
+                    return f.Apply(el.Rest());
+            }
         }
 
         static string PRINT(JlValue exp)
@@ -63,43 +82,42 @@ namespace JLisp
             return Printer.PrintStr(exp, true) + $", Type: {exp.GetType().Name}";
         }
 
-        static JlValue RE(Dictionary<string, JlValue> env, string str)
+        static JlValue RE(Env env, string str)
         {
             return EVAL(READ(str), env);
         }
 
+        public static Env _ref(Env env, string name, JlValue val) { return env.Set( name, val ); }
+
         static void Main(string[] args)
         {
             Console.WriteLine(Heading);
-            var replEnv = new Dictionary<string, JlValue>
-            {
-                ["+"] = new Plus(),
-                ["-"] = new Minus(),
-                ["*"] = new Multiply(),
-                ["/"] = new Divide()
-            };
+            var replEnv = new Env( null );
+            _ref(replEnv, "+", new Plus());
+            _ref(replEnv, "-", new Minus());
+            _ref(replEnv, "*", new Multiply());
+            _ref(replEnv, "/", new Divide());
+            
 
             string input;
-            while (true)
-            {
-                Console.Write(PROMPT);
+            while ( true ) {
+                Console.Write( PROMPT );
                 input = Console.ReadLine();
-                if (HandleCmd()) continue;
-                try
-                {
-                    Console.WriteLine(PRINT(RE(replEnv, input)));
+                if ( HandleCmd() ) continue;
+                try {
+                    Console.WriteLine( PRINT( RE( replEnv, input ) ) );
                 }
-                catch (JlContinue)
-                {
+                catch (JlContinue) {
                     continue;
                 }
-                catch (JlError e)
-                {
-                    Console.WriteLine("ERROR:" + e.Message);
+                catch (JlError e) {
+                    Console.WriteLine( "ERROR: " + e.Message );
                 }
-                catch (ParseError e)
-                {
-                    Console.WriteLine(e.Message);
+                catch (JlException e) {
+                    Console.WriteLine( "ERROR: " + e.Value );
+                }
+                catch (ParseError e) {
+                    Console.WriteLine( e.Message );
                 }
             }
 

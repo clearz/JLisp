@@ -31,9 +31,9 @@ namespace JLisp.Parsing.Types
         public JlInteger Copy() { return this; }
         public override string ToString() => Value.ToString();
         public JlInteger Add(JlInteger other) => new JlInteger(Value + other.Value);
-        public JlInteger Subtract(JlInteger other) => new JlInteger(Value + other.Value);
-        public JlInteger Multiply(JlInteger other) => new JlInteger(Value + other.Value);
-        public JlInteger Divide(JlInteger other) => new JlInteger(Value + other.Value);
+        public JlInteger Subtract(JlInteger other) => new JlInteger(Value - other.Value);
+        public JlInteger Multiply(JlInteger other) => new JlInteger(Value * other.Value);
+        public JlInteger Divide(JlInteger other) => new JlInteger(Value / other.Value);
         public JlConstant LessThan(JlInteger other) => Value < other.Value ? JlConstant.True : JlConstant.False;
         public JlConstant LessThanEqual(JlInteger other) => Value <= other.Value ? JlConstant.True : JlConstant.False;
         public JlConstant GreaterThan(JlInteger other) => Value > other.Value ? JlConstant.True : JlConstant.False;
@@ -57,7 +57,7 @@ namespace JLisp.Parsing.Types
 
     public class JlList : JlValue
     {
-        public string start = "(", end = ")";
+        public string _start = "(", _end = ")";
         public List<JlValue> Value { get; }
 
         public JlList(IEnumerable<JlValue> list) {
@@ -68,7 +68,7 @@ namespace JLisp.Parsing.Types
         }
         public override bool ListQ() => true;
         public override string ToString() => ToString(true);
-        public override string ToString(bool printReadably) => $"{start}{Printer.Join(Value, " ", printReadably)}{end}";
+        public override string ToString(bool printReadably) => $"{_start}{Printer.Join(Value, " ", printReadably)}{_end}";
 
         public JlList Copy() => (JlList)this.MemberwiseClone();
 
@@ -81,10 +81,19 @@ namespace JLisp.Parsing.Types
         public int Size() => Value.Count;
         public JlValue Nth(int idx) => Value[idx];
 
-        public JlValue Rest()
+        public JlList Rest()
         {
             if(Size() > 0) return new JlList(Value.GetRange(1, Size() -1));
             return new JlList();
+        }
+
+        public virtual JlList Slice(int start)
+        {
+            return new JlList( Value.GetRange( start, Value.Count-start ) );
+        }
+        public virtual JlList Slice(int start, int end)
+        {
+            return new JlList(Value.GetRange(start, end - start));
         }
 
 
@@ -93,12 +102,16 @@ namespace JLisp.Parsing.Types
     public class JlVector : JlList
     {
         public JlVector(IEnumerable<JlValue> val = null) : base(val) {
-            start = "[";
-            end = "]";
+            _start = "[";
+            _end = "]";
         }
 
         public new JlVector Copy() => (JlVector)this.MemberwiseClone();
         public override bool ListQ() => false;
+        public override JlList Slice(int start)
+        {
+            return new JlVector(Value.GetRange(start, Value.Count - start));
+        }
     }
 
     public class JlHashMap : JlValue
@@ -124,5 +137,7 @@ namespace JLisp.Parsing.Types
     public abstract class JlFunction : JlValue
     {
         public abstract JlValue Apply(JlList args);
+
+        public override string ToString() => this.GetType().Name;
     }
 }

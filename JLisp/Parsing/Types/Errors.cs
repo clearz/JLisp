@@ -14,10 +14,18 @@ namespace JLisp.Parsing.Types
         public ParseError(string msg) : base(msg) { }
     }
 
-    public class JlError : JlThrowable
-    {
+    public class JlError : JlThrowable {
         public JlError(string msg) : base(msg) { }
     }
 
     public class JlContinue : JlThrowable { }
+
+    public class JlException : JlThrowable
+    {
+        public JlValue Value { get; }
+
+        public JlException(JlValue value) { this.Value = value; }
+        public JlException(string value) : this( new JlString( value )) { }
+
+    }
 }
