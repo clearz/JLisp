@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using JLisp.Parsing.Types;
 
 namespace JLisp
@@ -21,6 +22,9 @@ namespace JLisp
 
         public static string PrintStr(JlValue jv, bool printReadably) => jv.ToString(printReadably);
 
+        public static string PrintStrArgs(JlList jv, String sep, bool printReadably) =>
+            Join( jv.Value, sep, printReadably );
+        public static string EscapeString(string str) => Regex.Escape(str);
         internal static IEnumerable<T> Interleave<T>(IEnumerable<T> first, IEnumerable<T> second)
         {
             using (IEnumerator<T>

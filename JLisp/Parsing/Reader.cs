@@ -44,7 +44,7 @@ namespace JLisp.Parsing
         public static JlValue ReadAtom(Reader rdr)
         {
             var token = rdr.Next();
-            const string pattern = @"(^-?[0-9]+$)|(^-?[0-9][0-9.]*$)|(^nil$)|(^true$)|(^false$)|^""(.*)""$|(^[^""]*$)";
+            const string pattern = @"(^-?[0-9]+$)|(^-?[0-9][0-9.]*$)|(^nil$)|(^true$)|(^false$)|^("".*"")$|(^[^""]*$)";
             var regex = new Regex(pattern);
             Match match = regex.Match(token);
             //Console.WriteLine($"token: ^{token}$");
@@ -59,9 +59,13 @@ namespace JLisp.Parsing
                 return JlConstant.True;
             else if (match.Groups[5].Value != String.Empty)
                 return JlConstant.False;
-            else if (match.Groups[6].Value != String.Empty)
-                //return new JlString(StringEscapeUtils.UnescapeJSON(match.Groups[6].Value));
-                return new JlString(match.Groups[6].Value);
+            else if ( match.Groups[6].Value != String.Empty ) {
+                var str = match.Groups[6].Value;
+                str = str.Substring( 1, str.Length - 2 )
+                         .Replace( "\\\"", "\"" )
+                         .Replace( "\\n", "\n" );
+                return new JlString(str);
+            }
             else if (match.Groups[7].Value != String.Empty)
                 return new JlSymbol(match.Groups[7].Value);
             else

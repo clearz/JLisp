@@ -7,6 +7,7 @@ using System.Text;
 using JLisp.Parsing;
 using JLisp.Parsing.Functions;
 using JLisp.Parsing.Types;
+using static JLisp.Parsing.Types.JlConstant;
 
 namespace JLisp
 {
@@ -40,25 +41,27 @@ namespace JLisp
 
         static JlValue EVAL(JlValue origAst, Env env)
         {
-            JlValue a0, a1, a2, res;
+            JlValue a0, a1, a2, a3, res;
+            JlList el;
             if (!origAst.ListQ()) return EvalAst(origAst, env);
 
             var ast = (JlList) origAst;
             if (ast.Size() == 0) return ast;
-            a0 = ast.Nth(0);
-            if (!(a0 is JlSymbol))
-                throw new JlError($"attempt to apply on non-symbol '{Printer.PrintStr(a0, true)}'");
-            switch ( ((JlSymbol)a0).Name )
+            a0 = ast[0];
+            string a0sym = a0 is JlSymbol ? ((JlSymbol)a0).Name : "__<*fn*>__";
+           // if (!(a0 is JlSymbol))
+           //     throw new JlError($"attempt to apply on non-symbol '{Printer.PrintStr(a0, true)}'");
+            switch ( a0sym )
             {
                 case "def!":
-                    a1 = ast.Nth( 1 );
-                    a2 = ast.Nth( 2 );
+                    a1 = ast[1];
+                    a2 = ast[2];
                     res = EVAL(a2, env);
                     env.Set( ((JlSymbol)a1).Name, res );
                     return res;
                 case "let*":
-                    a1 = ast.Nth(1);
-                    a2 = ast.Nth(2);
+                    a1 = ast[1];
+                    a2 = ast[2];
                     JlSymbol key;
                     JlValue val;
                     Env letEnv = new Env( env );
@@ -68,11 +71,33 @@ namespace JLisp
                         letEnv.Set( key.Name, EVAL( val, letEnv ) );
                     }
                     return EVAL( a2, letEnv );
+                case "do":
+                    el = (JlList)EvalAst( ast.Rest(), env );
+                    return el[el.Size() - 1];
+                case "if":
+                    a1 = ast[1];
+                    var cond = EVAL(a1,env);
+                    if ( cond == Nil || cond == False ) {
+                        if ( ast.Size() > 3 ) {
+                            a3 = ast[3];
+                            return EVAL( a3, env );
+                        }
+                        else return Nil;
+                    }
+                    else {
+                        a2 = ast[2];
+                        return EVAL( a2, env );
+                    }
+                case "fn*":
+                    var a1f = (JlList)ast[1];
+                    var a2f = ast[2];
+                    //Env curEnv = env;
+                    return new JlFunction( args => EVAL( a2f, new Env( env, a1f, args ) ) );
                 default:
-                    var el = (JlList) EvalAst(ast, env);
-                    var f = (JlFunction) el.Nth( 0 );
+                    el = (JlList) EvalAst(ast, env);
+                    var f = (JlFunction) el[0];
                     if (f == null)
-                        throw new JlError($"'{el.Nth(0)}' not found");
+                        throw new JlError($"'{el[0]}' not found");
                     return f.Apply(el.Rest());
             }
         }
@@ -93,11 +118,9 @@ namespace JLisp
         {
             Console.WriteLine(Heading);
             var replEnv = new Env( null );
-            _ref(replEnv, "+", new Plus());
-            _ref(replEnv, "-", new Minus());
-            _ref(replEnv, "*", new Multiply());
-            _ref(replEnv, "/", new Divide());
-            
+            foreach ( var entry in Core.Ns )
+                _ref( replEnv, entry.Key, entry.Value );
+
 
             string input;
             while ( true ) {
@@ -118,6 +141,10 @@ namespace JLisp
                 }
                 catch (ParseError e) {
                     Console.WriteLine( e.Message );
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("ERROR: " + e.Message);
                 }
             }
 
