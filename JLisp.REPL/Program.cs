@@ -8,7 +8,7 @@ namespace JLisp.REPL
 {
     class ConsoleREPL
     {
-        const string Heading = "JLisp v 0.6.3, By John Cleary.";
+        const string Heading = "JLisp v 0.7.3, By John Cleary.";
 
         static string Format(JlValue exp)
         {
