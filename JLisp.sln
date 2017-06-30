@@ -1,9 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26228.4
+VisualStudioVersion = 15.0.26430.14
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JLisp", "JLisp\JLisp.csproj", "{698F4ED6-5CCC-42BF-9393-476D395887C9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JLisp", "JLisp\JLisp.csproj", "{698F4ED6-5CCC-42BF-9393-476D395887C9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JLisp.Tests", "JLisp.Tests\JLisp.Tests.csproj", "{57D9CA17-F173-42B6-A9C8-7E693BBD758E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JLisp.REPL", "JLisp.REPL\JLisp.REPL.csproj", "{A6D5D30B-FF63-4E94-BA6C-88D9D0ADADDD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +19,14 @@ Global
 		{698F4ED6-5CCC-42BF-9393-476D395887C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{698F4ED6-5CCC-42BF-9393-476D395887C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{698F4ED6-5CCC-42BF-9393-476D395887C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57D9CA17-F173-42B6-A9C8-7E693BBD758E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57D9CA17-F173-42B6-A9C8-7E693BBD758E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57D9CA17-F173-42B6-A9C8-7E693BBD758E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57D9CA17-F173-42B6-A9C8-7E693BBD758E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6D5D30B-FF63-4E94-BA6C-88D9D0ADADDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6D5D30B-FF63-4E94-BA6C-88D9D0ADADDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6D5D30B-FF63-4E94-BA6C-88D9D0ADADDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6D5D30B-FF63-4E94-BA6C-88D9D0ADADDD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

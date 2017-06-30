@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using JLisp.Parsing.Types;
 
@@ -7,16 +8,17 @@ namespace JLisp.Parsing
 {
     public class Env
     {
+        public static IList<Env> _enviornments = new List<Env>();
         private readonly Env _outer = null;
         private readonly Dictionary<string, JlValue> _data = new Dictionary<string, JlValue>();
 
-        public Env(Env outer) { _outer = outer; }
+        public Env(Env outer) { _outer = outer; _enviornments.Add( this ); }
 
         public Env(Env outer, JlList binds, JlList exprs) : this( outer ) {
             for ( int i = 0; i < binds.Size; i++ ) {
                 string sym = ((JlSymbol)binds.Nth( i )).Name;
                 if ( sym == "&" ) {
-                    _data[((JlSymbol)binds.Nth( i )).Name] = exprs.Slice( i );
+                    _data[((JlSymbol)binds.Nth( i+1 )).Name] = exprs.Slice( i );
                     break;
                 }
                 else {
@@ -30,12 +32,7 @@ namespace JLisp.Parsing
             if ( _data.ContainsKey( key ) ) {
                 return this;
             }
-            else if ( _outer != null ) {
-                return _outer.Find( key );
-            }
-            else {
-                return null;
-            }
+            return _outer?.Find( key );
         }
 
         public JlValue Get(string key) {

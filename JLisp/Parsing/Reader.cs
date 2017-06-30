@@ -6,7 +6,7 @@ using JLisp.Parsing.Types;
 
 namespace JLisp.Parsing
 {
-    class Reader
+    public class Reader
     {
         private readonly List<string> _tokens;
         private int _position;
@@ -28,7 +28,7 @@ namespace JLisp.Parsing
         public static List<string> Tokenize(string str)
         {
             var tokens = new List<string>();
-            const string pattern = @"[zs ,]*(~@|[\[\]{}()'`~@]|""(?:[\\].|[^\\""])*""|;.*|[^\s \[\]{}()'""`~@,;]*)";
+            const string pattern = @"[\s ,]*(~@|[\[\]{}()'`~@]|""(?:[\\].|[^\\""])*""|;.*|[^\s \[\]{}()'""`~@,;]*)";
             var regex = new Regex(pattern);
             foreach (Match match in regex.Matches(str))
             {
@@ -93,14 +93,26 @@ namespace JLisp.Parsing
             if(token == null) throw new JlContinue();
 
             JlValue form = null;
-            switch (token[0])
+            switch (token)
             {
-                case '(': form = ReadList(rdr, new JlList(), '(', ')'); break;
-                case ')': throw new ParseError("unexpected ')'");
-                case '[': form = ReadList(rdr, new JlVector(), '[', ']'); break;
-                case ']': throw new ParseError("unexpected ']'");
-                case '{': form = ReadHashMap(rdr); break;
-                case '}': throw new ParseError("unexpected '}'");
+                case "'":
+                    rdr.Next();
+                    return new JlList(new JlSymbol("quote"), ReadForm(rdr));
+                case "`":
+                    rdr.Next();
+                    return new JlList(new JlSymbol("quasiquote"), ReadForm(rdr));
+                case "~":
+                    rdr.Next();
+                    return new JlList(new JlSymbol("unquote"), ReadForm(rdr));
+                case "~@":
+                    rdr.Next();
+                    return new JlList(new JlSymbol("splice-unquote"), ReadForm(rdr));
+                case "(": form = ReadList(rdr, new JlList(), '(', ')'); break;
+                case ")": throw new ParseError("unexpected ')'");
+                case "[": form = ReadList(rdr, new JlVector(), '[', ']'); break;
+                case "]": throw new ParseError("unexpected ']'");
+                case "{": form = ReadHashMap(rdr); break;
+                case "}": throw new ParseError("unexpected '}'");
                 default:  form = ReadAtom(rdr); break;
             }
 

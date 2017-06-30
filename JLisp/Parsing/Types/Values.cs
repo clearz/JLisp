@@ -2,9 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Reflection;
-using System.Text;
 
 namespace JLisp.Parsing.Types
 {
@@ -39,8 +36,11 @@ namespace JLisp.Parsing.Types
             return false;
         }
 
+        public abstract JlValue Copy();
         public static bool operator ==(JlValue a, JlValue b) => _EqualQ(a, b);
         public static bool operator !=(JlValue a, JlValue b) => !_EqualQ(a, b);
+
+        public static implicit operator string(JlValue val) => val.ToString();
     }
 
     public class JlConstant : JlValue
@@ -48,16 +48,21 @@ namespace JLisp.Parsing.Types
         private readonly string _value;
         private JlConstant(string value) { _value = value; }
         public static JlConstant Nil { get; } = new JlConstant("nil");
-        public static JlConstant True { get; } = new JlConstant("true");
-        public static JlConstant False { get; } = new JlConstant("false");
-        public override string ToString() => _value.ToString();
+        public static JlConstant True { get; } = new JlBoolean("true");
+        public static JlConstant False { get; } = new JlBoolean("false");
+        public override JlValue Copy() => this;
+        public override string ToString() => _value;
+
+        private class JlBoolean : JlConstant {
+            internal JlBoolean(string value) : base(value){}
+        }
     }
 
     public class JlInteger : JlValue
     {
         public int Value { get; }
         public JlInteger(int value) { Value = value; }
-        public JlInteger Copy() { return this; }
+        public override JlValue Copy() { return new JlInteger(Value); }
         public override string ToString() => Value.ToString();
         public JlInteger Add(JlInteger other) => new JlInteger(Value + other.Value);
         public JlInteger Subtract(JlInteger other) => new JlInteger(Value - other.Value);
@@ -78,20 +83,22 @@ namespace JLisp.Parsing.Types
         public static JlConstant operator <(JlInteger j1, JlInteger j2) => j1?.LessThan(j2);
         public static JlConstant operator <=(JlInteger j1, JlInteger j2) => j1?.LessThanEqual(j2);
 
+        public static implicit operator JlList(JlInteger ji) => new JlList( ji ); 
+
     }
     public class JlSymbol : JlValue
     {
         public string Name { get; }
         public JlSymbol(string value)  { Name = value; }
         public override string ToString() => Name;
-        public JlSymbol Copy() => this;
+        public override JlValue Copy() => this;
     }
 
     public class JlString : JlValue
     {
         public string Value { get; }
         public JlString(string value)  { Value = value; }
-        public JlString Copy() => this;
+        public override JlValue Copy() => new JlString(Value);
         public override string ToString() => Value;
 
         public override string ToString(bool printReadable) {
@@ -119,7 +126,7 @@ namespace JLisp.Parsing.Types
         public override string ToString() => ToString(true);
         public override string ToString(bool printReadably) => $"{_start}{Printer.Join(Value, " ", printReadably)}{_end}";
 
-        public JlList Copy() => (JlList)this.MemberwiseClone();
+        public override JlValue Copy() => new JlList(Value.Select(v => v.Copy()));
 
         public JlList ConjBANG(params JlValue[] jvs)
         {
@@ -144,6 +151,7 @@ namespace JLisp.Parsing.Types
         {
             return new JlList(Value.GetRange(start, end - start));
         }
+        public static implicit operator JlList(JlInteger ji) => new JlList(ji);
 
 
     }
@@ -151,11 +159,10 @@ namespace JLisp.Parsing.Types
     public class JlVector : JlList
     {
         public JlVector(IEnumerable<JlValue> val = null) : base(val) {
-            _start = "[";
-            _end = "]";
+            _start = "["; _end = "]";
         }
 
-        public new JlVector Copy() => (JlVector)this.MemberwiseClone();
+        public override JlValue Copy() => new JlVector(Value.Select(v => v.Copy()));
         public override bool ListQ() => false;
         public override JlList Slice(int start)
         {
@@ -170,12 +177,15 @@ namespace JLisp.Parsing.Types
         public JlHashMap(Dictionary<string, JlValue> value) {
             Value = value;
         }
-        public JlHashMap(JlList list) {
-            Value = list.Value.ToDictionary(jv => jv.ToString());
+        public JlHashMap(JlList list)
+        {
+            Value = list.Value.Where((v, i) => i % 2 == 0)
+                .Zip(list.Value.Where((v, i) => i % 2 == 1),
+                    (j1, j2) => new {Key=j1.ToString(), Value=j2}).ToDictionary(kv => kv.Key,kv => kv.Value);
         }
         public override string ToString() => ToString(true);
         public override string ToString(bool printReadably) => $"{{{Printer.Join(Value, " ", printReadably)}}}";
-        public JlHashMap Copy() => (JlHashMap)this.MemberwiseClone();
+        public override JlValue Copy() => new JlHashMap(Value.ToDictionary(v => v.Key, v => v.Value.Copy()));
         public JlHashMap ConjBANG(params JlValue[] jvs) {
             foreach (var value in jvs)
                 Value.Add(value.ToString(), value);
@@ -185,31 +195,31 @@ namespace JLisp.Parsing.Types
 
     public class JlFunction : JlValue
     {
-        private readonly Expression<Func<JlList, JlValue>> _func = null;
-        private Func<JlList, JlValue> _cache = null;
+        private readonly Func<JlList, JlValue> _func;
         public JlValue Ast { get; }
         public Env Env { get; }
         public JlList FParams { get; }
-
+        public bool IsMacro => _macro;
         public JlFunction(JlValue ast, Env env, JlList fparams,
-                          Expression<Func<JlList, JlValue>> func) : this(func) {
+                          Func<JlList, JlValue> func) : this(func) {
             Ast = ast;
             Env = env;
             FParams = fparams;
-            JlString s = new JlString( "10" );
-            JlInteger i = (JlInteger)s;
         }
         protected JlFunction() { }
-        public JlFunction(Expression<Func<JlList, JlValue>> func) { _func = func; }
-        public virtual JlValue Apply(JlList args) => (_cache ?? (_cache = _func.Compile()))( args );
+        public JlFunction(Func<JlList, JlValue> func) { _func = func; }
+        public virtual JlValue Apply(JlList args) => _func( args );
 
+        public override JlValue Copy() => new JlFunction(Ast.Copy(), Env, (JlList)FParams.Copy(), _func){_macro = _macro};
         public Env GenEnv(JlList args) => new Env( Env, FParams, args );
-        public override string ToString() { //=> _func?.ToString() ?? GetType().Name;
+        public override string ToString() {
             if ( Ast != null )
                 return $"<fn* {Printer.PrintStr( FParams, true )}>";
-            else if(_func != null)
+            if(_func != null)
                 return $"<builtin_lambda {_func}>";
             return $"<builtin_class {GetType().Name}>";
         }
+        public void SetMacro() { _macro = true; }
+        private bool _macro;
     }
 }

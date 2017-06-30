@@ -8,8 +8,7 @@ using Func = JLisp.Parsing.Types.JlFunction;
 
 namespace JLisp.Parsing.Functions
 {
-
-    static class Core
+    public static class Core
     {
         // String Functions
         public static Func AsReadableString = new Func(
@@ -22,6 +21,24 @@ namespace JLisp.Parsing.Functions
         public static Func ListQ = new Func(
                a => a[0].GetType() == typeof(JlList) ? True : False );
 
+        private static readonly Func nth = new Func( a => ((JlList)a[0])[((JlInteger)a[1]).Value] );
+        private static readonly Func cons =
+            new Func( a => {
+                                var lst = new List<JlValue> { a[0] };
+                                lst.AddRange( ((JlList)a[1]).Value );
+                                return (JlValue)new JlList( lst );
+                            } );
+
+        private static readonly Func concat =
+            new Func( a => {
+                                if(a.Size == 0) return new JlList();
+                                var lst = new List<JlValue>();
+                                lst.AddRange( ((JlList)a[0]).Value );
+                                for ( int i = 1; i < a.Size; i++ ) 
+                                    lst.AddRange( ((JlList)a[i]).Value );
+                                return (JlValue)new JlList( lst );
+
+                            });
         public static Dictionary<string, JlValue> Ns = new Dictionary<string, JlValue>
             {
                 ["="] = new Func( a => a[0] == a[1] ? True : False ),
@@ -39,21 +56,26 @@ namespace JLisp.Parsing.Functions
                 ["/"] = new Func( a => (JlInteger)a[0] / (JlInteger)a[1] ),
                 ["list"] = new Func( a => new JlList( a.Value ) ),
                 ["list?"] = ListQ,
-                ["first"] = new Func( a => ((JlList)a[0]).Value[0] ),
+                ["cons"] = cons,
+                ["concat"] = concat,
+                ["nth"] = nth,
+                ["first"] = new Func( a => ((JlList)a[0])[0] ),
                 ["rest"] = new Func( a => ((JlList)a[0]).Rest() ),
                 ["count"] = new Func( a => new JlInteger( ((JlList)a[0]).Size ) ),
-                ["empty"] = new Func( a => ((JlList)a[0]).Size == 0 ? True : False ),
+                ["empty?"] = new Func( a => ((JlList)a[0]).Size == 0 ? True : False ),
 
             };
-        class Print : JlFunction {
+        class Print : Func {
             public override JlValue Apply(JlList args) {
                 Console.WriteLine( Printer.PrintStrArgs( args, " ", true ) );
                 return Nil;
             }
         }
 
-        class PrintLine : JlFunction {
-            public override JlValue Apply(JlList args) {
+        class PrintLine : Func {
+            public override JlValue Apply(JlList args)
+            {
+                System.Diagnostics.Debugger.Launch();
                 Console.WriteLine( Printer.PrintStrArgs( args, " ", false ) );
                 return Nil;
             }

@@ -7,7 +7,7 @@ using JLisp.Parsing.Types;
 
 namespace JLisp
 {
-    class Printer
+    public class Printer
     {
         public static string Join(List<JlValue> value, string delim, bool printReadably) =>
             String.Join(delim, value.Select(v => v.ToString(printReadably)));
