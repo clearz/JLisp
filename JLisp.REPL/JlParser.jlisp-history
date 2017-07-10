@@ -1,10 +1,10 @@
-(nth lst 0)
-(nth lst 1)
-(nth lst 3)
-(nth lst 4)
-(unquote (nth lst 2)
+`(1 ~@lst )
+`(* 1 ~lst )
+"abc
+"abc"
+(list 1 2 3 4)
+(+ [3 4])
+(+ ~[3 4])
 
-(unquote (nth lst 2))
-(`(nth lst 2))
-(list `(nth lst 2))
+(+ ~(jlist 3 4))
 

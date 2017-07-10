@@ -1,5 +1,5 @@
-﻿using System.Collections.Generic;
-using System.IO;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using JLisp.Parsing;
 using JLisp.Parsing.Functions;
@@ -10,7 +10,7 @@ namespace JLisp
 {
     public class Evaluator
     {
-        private static Env ENV_ROOT { get; }
+        public static Env EnvRoot { get; private set; }
         static bool IsPair(JlValue x) => x is JlList && ((JlList)x).Size > 0;
 
         static JlValue QuasiQuote(JlValue ast)
@@ -38,7 +38,7 @@ namespace JLisp
             return false;
         }
 
-        static JlValue MicroExpand(JlValue ast, Env env)
+        static JlValue MacroExpand(JlValue ast, Env env)
         {
             while (IsMacroCall(ast, env))
             {
@@ -56,7 +56,7 @@ namespace JLisp
             {
                 var newLst = ast.ListQ() ? new JlList() : new JlVector();
                 foreach (var jv in oldLst.Value)
-                    newLst.ConjBANG(InnerEvaluate(jv, env));
+                    newLst.ConjBang(InnerEvaluate(jv, env));
                 return newLst;
             }
             if (ast is JlHashMap map)
@@ -78,15 +78,15 @@ namespace JLisp
             while (true)
             {
                 if (!origAst.ListQ()) return EvalAst(origAst, env);
-                JlValue expanded = MicroExpand(origAst, env);
-                if (!expanded.ListQ()) return expanded;
+                JlValue expanded = MacroExpand(origAst, env);
+                if (!expanded.ListQ()) return EvalAst(expanded, env);
 
                 var ast = (JlList)expanded;
                 if (ast.Size == 0) return ast;
                 a0 = ast[0];
-                string a0sym = a0 is JlSymbol sym ? sym.Name : "__<*fn*>__";
+                string a0Sym = a0 is JlSymbol sym ? sym.Name : "__<*fn*>__";
 
-                switch (a0sym)
+                switch (a0Sym)
                 {
                     case "def!":
                         a1 = ast[1];
@@ -102,23 +102,51 @@ namespace JLisp
                         {
                             var key = (JlSymbol)((JlList)a1)[i];
                             var val = ((JlList)a1)[i + 1];
-                            letEnv.Set(key.Name, InnerEvaluate(val, letEnv));
+                            letEnv.Set(key, InnerEvaluate(val, letEnv));
                         }
-                        return InnerEvaluate(a2, letEnv);
+                        origAst = a2;
+                        env = letEnv;
+                        break;
                     case "quote":
                         return ast[1];
                     case "quasiquote":
-                        return InnerEvaluate(QuasiQuote(ast[1]), env);
+                        origAst = QuasiQuote(ast[1]);
+                        break;
                     case "defmacro!":
                         a1 = ast[1];
                         a2 = ast[2];
                         res = InnerEvaluate(a2, env);
                         ((JlFunction)res).SetMacro();
-                        env.Set(((JlSymbol)a1).Name, res);
+                        env.Set(((JlSymbol)a1), res);
                         return res;
-                    case "microexpand":
+                    case "macroexpand":
                         a1 = ast[1];
-                        return MicroExpand(a1, env);
+                        return MacroExpand(a1, env);
+                    case "try*":
+                        try
+                        {
+                            return InnerEvaluate(ast[1], env);
+                        }
+                        catch (Exception e)
+                        {
+                            if (ast.Size > 2)
+                            {
+                                JlValue exc;
+                                a2 = ast[2];
+                                JlValue a20 = ((JlList) a2)[0];
+                                if (((JlSymbol) a20).Name == "catch*")
+                                {
+                                    if (e is JlException ex)
+                                        exc = ex.Value;
+                                    else
+                                        exc = e.StackTrace;
+                                    return InnerEvaluate(((JlList) a2)[2],
+                                        new Env(env, ((JlList) a2).Slice(1, 2),
+                                            new JlList(exc)));
+                                }
+                            }
+                            throw e;
+                        }
                     case "do":
                         EvalAst(ast.Rest(), env);
                         origAst = ast[ast.Size - 1];
@@ -135,10 +163,10 @@ namespace JLisp
                         else origAst = ast[2];
                         break;
                     case "fn*":
-                        var a1f = (JlList)ast[1];
-                        var a2f = ast[2];
-                        return new JlFunction(a2f, env, a1f,
-                            args => InnerEvaluate(a2f, new Env(env, a1f, args)));
+                        var a1F = (JlList)ast[1];
+                        var a2F = ast[2];
+                        return new JlFunction(a2F, env, a1F,
+                            args => InnerEvaluate(a2F, new Env(env, a1F, args)));
                     default:
                         el = (JlList)EvalAst(ast, env);
                         if (el[0] is JlFunction f)
@@ -152,47 +180,46 @@ namespace JLisp
                             else
                                 return f.Apply(el.Rest());
                         }
-                        else throw new ParseError($"Expecting a Function Got '{el}'");
+                        else throw new ParseError($"Unknown Type Got '{el}'");
                         break;
                 }
             }
         }
 
-        public static Env Set(string key, JlValue value) => ENV_ROOT.Set(key, value);
-
         public static JlValue Eval(string str)
         {
-            return InnerEvaluate(Reader.ReadStr(str), ENV_ROOT);
+            return InnerEvaluate(Reader.ReadStr(str), EnvRoot);
         }
-
-        private static void _ref(Env env, string name, JlValue val) { env.Set(name, val); }
 
         static Evaluator()
         {
-            ENV_ROOT = new Env(null);
             Init();
         }
-        private static void Init() { 
+        private static void Init() {
 
+            EnvRoot = new Env(null);
             foreach (var entry in Core.Ns)
-                _ref(ENV_ROOT, entry.Key, entry.Value);
+                EnvRoot.Set(entry.Key, entry.Value);
+            EnvRoot.Set("eval", new JlFunction(a => InnerEvaluate(a[0], EnvRoot)));
+            EnvRoot.Set("fmt", new JlFunction(
+                a => string.Format(((JlString)a[0]).Value, a.Value.Skip(1).ToArray())));
+            EnvRoot.Set("typeof", new JlFunction(a => a[0].GetType().Name));
 
-            _ref(ENV_ROOT, "read-string", new JlFunction(
-                a => Reader.ReadStr((((JlString)a[0]).Value))));
-            _ref(ENV_ROOT, "eval", new JlFunction(
-                a => InnerEvaluate(a[0], ENV_ROOT)));
-            _ref(ENV_ROOT, "slurp", new JlFunction(
-                a => new JlString(File.ReadAllText(((JlString)a[0]).Value))));
-            _ref(ENV_ROOT, "fmt", new JlFunction(
-                a => new JlString(string.Format(((JlString)a[0]).Value, a.Value.Skip(1).ToArray()))));
 
-            Eval("(def! not (fn* [a] (if a false true)))");
-            Eval("(def! load-file (fn* [f] (eval (read-string (str \"(do \" (slurp f) \")\")))))");
+            Eval("(def! *host-language* \"C#\")");
+            Eval("(def! not (fn* (a) (if a false true)))");
+            Eval("(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f) \")\")))))");
             Eval("(defmacro! cond (fn* (& xs) (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (rest (rest xs)))))))");
-            Eval("(defmacro! or (fn* (& xs) (if (empty? xs) nil (if (= 1 (count xs)) (first xs) `(let* (or_FIXME ~(first xs)) (if or_FIXME or_FIXME (or ~@(rest xs))))))))");
+            Eval("(def! *gensym-counter* (atom 0))");
+            Eval("(def! gensym (fn* [] (symbol (str \"G__\" (swap! *gensym-counter* (fn* [x] (+ 1 x)))))))");
+            Eval("(defmacro! or (fn* (& xs) (if (empty? xs) nil (if (= 1 (count xs)) (first xs) (let* (condvar (gensym)) `(let* (~condvar ~(first xs)) (if ~condvar ~condvar (or ~@(rest xs)))))))))");
 
         }
 
 
+        public static void Reset()
+        {
+            Init();
+        }
     }
 }

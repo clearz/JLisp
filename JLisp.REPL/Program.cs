@@ -1,66 +1,50 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using JLisp.Parsing;
+using System.Text;
 using JLisp.Parsing.Types;
 
 namespace JLisp.REPL
 {
-    class ConsoleREPL
+    static class ConsoleREPL
     {
         const string Heading = "JLisp v 0.7.3, By John Cleary.";
 
         static string Format(JlValue exp)
         {
-            return Printer.PrintStr(exp, true) + $", Type: {exp.GetType().Name}";
+            return Printer.PrintStr(exp, true);// + $", Type: {exp.GetType().Name}";
         }
 
         static void Main(string[] args)
         {
-            InputReader inputReader = InputReader.Terminal;
-            if (!HandleArgs(args.ToList())) return;
+            Console.OutputEncoding = Encoding.Unicode;
             Console.WriteLine(Heading);
+            InputReader inputReader = InputReader.Raw;
+            if (!HandleArgs(args.ToList())) return;
 
-
-            while (true)
-            {
-                string input = inputReader.Readline();
-                if (HandleCmd(input)) continue;
-                try
-                {
-                    try
-                    {
+            while (true) {
+                try {
+                    string input = inputReader.Readline();
+                    if (HandleCmd(input)) continue;
+                    try {
                         var jval = Evaluator.Eval(input);
                         Console.WriteLine(Format(jval));
                     }
-                    finally
-                    {
+                    finally {
                         Console.ForegroundColor = ConsoleColor.Red;
                     }
                 }
-                catch (JlContinue)
-                {
+                catch (JlContinue) {
                     continue;
                 }
-                catch (JlError e)
-                {
-                    Console.WriteLine("ERROR: " + e.Message);
-                }
-                catch (JlException e)
-                {
+                catch (JlException e) {
                     Console.WriteLine("ERROR: " + e.Value);
                 }
-                catch (ParseError e)
-                {
-                    Console.WriteLine(e.Message);
-                }
-                catch (Exception e)
-                {
+                catch (Exception e) {
                     Console.WriteLine("ERROR: " + e.Message);
                     Console.WriteLine(e.StackTrace);
                 }
-                finally
-                {
+                finally {
                     Console.ResetColor();
                 }
             }
@@ -72,6 +56,9 @@ namespace JLisp.REPL
                     case "cls":
                         Console.Clear();
                         return true;
+                    case "reset":
+                        Evaluator.Reset();
+                        goto case "cls";
                     case "exit":
                     case "quit":
                         Environment.Exit(0);

@@ -29,7 +29,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 
-namespace JLisp.Parsing
+namespace JLisp
 {
     public class LineEditor
     {
@@ -50,60 +50,60 @@ namespace JLisp.Parsing
         //static StreamWriter log;
 
         // The text being edited.
-        StringBuilder text;
+        StringBuilder _text;
 
         // The text as it is rendered (replaces (char)1 with ^A on display for example).
-        StringBuilder rendered_text;
+        readonly StringBuilder _renderedText;
 
         // The prompt specified, and the prompt shown to the user.
-        string prompt;
-        string shown_prompt;
+        string _prompt;
+        string _shownPrompt;
 
         // The current cursor position, indexes into "text", for an index
         // into rendered_text, use TextToRenderPos
-        int cursor;
+        int _cursor;
 
         // The row where we started displaying data.
-        int home_row;
+        int _homeRow;
 
         // The maximum length that has been displayed on the screen
-        int max_rendered;
+        int _maxRendered;
 
         // If we are done editing, this breaks the interactive loop
-        bool done = false;
+        bool _done = false;
 
         // The thread where the Editing started taking place
-        Thread edit_thread;
+        Thread _editThread;
 
         // Our object that tracks history
-        History history;
+        readonly History _history;
 
         // The contents of the kill buffer (cut/paste in Emacs parlance)
-        string kill_buffer = "";
+        string _killBuffer = "";
 
         // The string being searched for
-        string search;
-        string last_search;
+        string _search;
+        string _lastSearch;
 
         // whether we are searching (-1= reverse; 0 = no; 1 = forward)
-        int searching;
+        int _searching;
 
         // The position where we found the match.
-        int match_at;
+        int _matchAt;
 
         // Used to implement the Kill semantics (multiple Alt-Ds accumulate)
-        KeyHandler last_handler;
+        KeyHandler _lastHandler;
 
         delegate void KeyHandler();
 
         struct Handler
         {
-            public ConsoleKeyInfo CKI;
-            public KeyHandler KeyHandler;
+            public readonly ConsoleKeyInfo Cki;
+            public readonly KeyHandler KeyHandler;
 
             public Handler(ConsoleKey key, KeyHandler h)
             {
-                CKI = new ConsoleKeyInfo((char)0, key, false, false, false);
+                Cki = new ConsoleKeyInfo((char)0, key, false, false, false);
                 KeyHandler = h;
             }
 
@@ -111,12 +111,12 @@ namespace JLisp.Parsing
             {
                 KeyHandler = h;
                 // Use the "Zoom" as a flag that we only have a character.
-                CKI = new ConsoleKeyInfo(c, ConsoleKey.F24, false, false, false);
+                Cki = new ConsoleKeyInfo(c, ConsoleKey.F24, false, false, false);
             }
 
             public Handler(ConsoleKeyInfo cki, KeyHandler h)
             {
-                CKI = cki;
+                Cki = cki;
                 KeyHandler = h;
             }
 
@@ -146,13 +146,13 @@ namespace JLisp.Parsing
         /// </remarks>
         public AutoCompleteHandler AutoCompleteEvent;
 
-        static Handler [] handlers;
+        static Handler [] _handlers;
 
         public LineEditor(string name) : this(name, 10) { }
 
         public LineEditor(string name, int histsize)
         {
-            handlers = new Handler[] {
+            _handlers = new Handler[] {
                 new Handler (ConsoleKey.Home,       CmdHome),
                 new Handler (ConsoleKey.End,        CmdEnd),
                 new Handler (ConsoleKey.LeftArrow,  CmdLeft),
@@ -171,7 +171,7 @@ namespace JLisp.Parsing
                 Handler.Control ('F', CmdRight),
                 Handler.Control ('P', CmdHistoryPrev),
                 Handler.Control ('N', CmdHistoryNext),
-                Handler.Control ('K', CmdKillToEOF),
+                Handler.Control ('K', CmdKillToEof),
                 Handler.Control ('Y', CmdYank),
                 Handler.Control ('D', CmdDeleteChar),
                 Handler.Control ('L', CmdRefresh),
@@ -184,16 +184,16 @@ namespace JLisp.Parsing
                 Handler.Alt ((char) 8, ConsoleKey.Backspace, CmdDeleteBackword),
 				
 				// DEBUG
-				//Handler.Control ('T', CmdDebug),
+				Handler.Control ('T', CmdDebug),
 
 				// quote
 				Handler.Control ('Q', delegate { HandleChar (Console.ReadKey (true).KeyChar); })
             };
 
-            rendered_text = new StringBuilder();
-            text = new StringBuilder();
+            _renderedText = new StringBuilder();
+            _text = new StringBuilder();
 
-            history = new History(name, histsize);
+            _history = new History(name, histsize);
 
             //if (File.Exists ("log"))File.Delete ("log");
             //log = File.CreateText ("log"); 
@@ -201,21 +201,21 @@ namespace JLisp.Parsing
 
         void CmdDebug()
         {
-            history.Dump();
+            _history.Dump();
             Console.WriteLine();
             Render();
         }
 
         void Render()
         {
-            Console.Write(shown_prompt);
-            Console.Write(rendered_text);
+            Console.Write(_shownPrompt);
+            Console.Write(_renderedText);
 
-            int max = System.Math.Max (rendered_text.Length + shown_prompt.Length, max_rendered);
+            int max = System.Math.Max (_renderedText.Length + _shownPrompt.Length, _maxRendered);
 
-            for (int i = rendered_text.Length + shown_prompt.Length; i < max_rendered; i++)
+            for (int i = _renderedText.Length + _shownPrompt.Length; i < _maxRendered; i++)
                 Console.Write(' ');
-            max_rendered = shown_prompt.Length + rendered_text.Length;
+            _maxRendered = _shownPrompt.Length + _renderedText.Length;
 
             // Write one more to ensure that we always wrap around properly if we are at the
             // end of a line.
@@ -228,9 +228,9 @@ namespace JLisp.Parsing
         {
             int lines = 1 + (screenpos / Console.WindowWidth);
 
-            home_row = Console.CursorTop - (lines - 1);
-            if (home_row < 0)
-                home_row = 0;
+            _homeRow = Console.CursorTop - (lines - 1);
+            if (_homeRow < 0)
+                _homeRow = 0;
         }
 
 
@@ -239,38 +239,38 @@ namespace JLisp.Parsing
             int rpos = TextToRenderPos (pos);
             int i;
 
-            for (i = rpos; i < rendered_text.Length; i++)
-                Console.Write(rendered_text[i]);
+            for (i = rpos; i < _renderedText.Length; i++)
+                Console.Write(_renderedText[i]);
 
-            if ((shown_prompt.Length + rendered_text.Length) > max_rendered)
-                max_rendered = shown_prompt.Length + rendered_text.Length;
+            if ((_shownPrompt.Length + _renderedText.Length) > _maxRendered)
+                _maxRendered = _shownPrompt.Length + _renderedText.Length;
             else
             {
-                int max_extra = max_rendered - shown_prompt.Length;
-                for (; i < max_extra; i++)
+                int maxExtra = _maxRendered - _shownPrompt.Length;
+                for (; i < maxExtra; i++)
                     Console.Write(' ');
             }
         }
 
         void ComputeRendered()
         {
-            rendered_text.Length = 0;
+            _renderedText.Length = 0;
 
-            for (int i = 0; i < text.Length; i++)
+            for (int i = 0; i < _text.Length; i++)
             {
-                int c = (int) text [i];
+                int c = (int) _text [i];
                 if (c < 26)
                 {
                     if (c == '\t')
-                        rendered_text.Append("    ");
+                        _renderedText.Append("    ");
                     else
                     {
-                        rendered_text.Append('^');
-                        rendered_text.Append((char)(c + (int)'A' - 1));
+                        _renderedText.Append('^');
+                        _renderedText.Append((char)(c + (int)'A' - 1));
                     }
                 }
                 else
-                    rendered_text.Append((char)c);
+                    _renderedText.Append((char)c);
             }
         }
 
@@ -282,7 +282,7 @@ namespace JLisp.Parsing
             {
                 int c;
 
-                c = (int)text[i];
+                c = (int)_text[i];
 
                 if (c < 26)
                 {
@@ -300,27 +300,27 @@ namespace JLisp.Parsing
 
         int TextToScreenPos(int pos)
         {
-            return shown_prompt.Length + TextToRenderPos(pos);
+            return _shownPrompt.Length + TextToRenderPos(pos);
         }
 
         string Prompt {
-            get { return prompt; }
-            set { prompt = value; }
+            get { return _prompt; }
+            set { _prompt = value; }
         }
 
         int LineCount {
             get {
-                return (shown_prompt.Length + rendered_text.Length) / Console.WindowWidth;
+                return (_shownPrompt.Length + _renderedText.Length) / Console.WindowWidth;
             }
         }
 
         void ForceCursor(int newpos)
         {
-            cursor = newpos;
+            _cursor = newpos;
 
-            int actual_pos = shown_prompt.Length + TextToRenderPos (cursor);
-            int row = home_row + (actual_pos/Console.WindowWidth);
-            int col = actual_pos % Console.WindowWidth;
+            int actualPos = _shownPrompt.Length + TextToRenderPos (_cursor);
+            int row = _homeRow + (actualPos/Console.WindowWidth);
+            int col = actualPos % Console.WindowWidth;
 
             if (row >= Console.BufferHeight)
                 row = Console.BufferHeight - 1;
@@ -332,7 +332,7 @@ namespace JLisp.Parsing
 
         void UpdateCursor(int newpos)
         {
-            if (cursor == newpos)
+            if (_cursor == newpos)
                 return;
 
             ForceCursor(newpos);
@@ -340,21 +340,21 @@ namespace JLisp.Parsing
 
         void InsertChar(char c)
         {
-            int prev_lines = LineCount;
-            text = text.Insert(cursor, c);
+            int prevLines = LineCount;
+            _text = _text.Insert(_cursor, c);
             ComputeRendered();
-            if (prev_lines != LineCount)
+            if (prevLines != LineCount)
             {
 
-                Console.SetCursorPosition(0, home_row);
+                Console.SetCursorPosition(0, _homeRow);
                 Render();
-                ForceCursor(++cursor);
+                ForceCursor(++_cursor);
             }
             else
             {
-                RenderFrom(cursor);
-                ForceCursor(++cursor);
-                UpdateHomeRow(TextToScreenPos(cursor));
+                RenderFrom(_cursor);
+                ForceCursor(++_cursor);
+                UpdateHomeRow(TextToScreenPos(_cursor));
             }
         }
 
@@ -363,7 +363,7 @@ namespace JLisp.Parsing
         //
         void CmdDone()
         {
-            done = true;
+            _done = true;
         }
 
         void CmdTabOrComplete()
@@ -376,9 +376,9 @@ namespace JLisp.Parsing
                     complete = true;
                 else
                 {
-                    for (int i = 0; i < cursor; i++)
+                    for (int i = 0; i < _cursor; i++)
                     {
-                        if (!Char.IsWhiteSpace(text[i]))
+                        if (!Char.IsWhiteSpace(_text[i]))
                         {
                             complete = true;
                             break;
@@ -388,7 +388,7 @@ namespace JLisp.Parsing
 
                 if (complete)
                 {
-                    Completion completion = AutoCompleteEvent (text.ToString (), cursor);
+                    Completion completion = AutoCompleteEvent (_text.ToString (), _cursor);
                     string [] completions = completion.Result;
                     if (completions == null)
                         return;
@@ -436,7 +436,7 @@ mismatch:
                         }
                         Console.WriteLine();
                         Render();
-                        ForceCursor(cursor);
+                        ForceCursor(_cursor);
                     }
                 }
                 else
@@ -453,20 +453,20 @@ mismatch:
 
         void CmdEnd()
         {
-            UpdateCursor(text.Length);
+            UpdateCursor(_text.Length);
         }
 
         void CmdLeft()
         {
-            if (cursor == 0)
+            if (_cursor == 0)
                 return;
 
-            UpdateCursor(cursor - 1);
+            UpdateCursor(_cursor - 1);
         }
 
         void CmdBackwardWord()
         {
-            int p = WordBackward (cursor);
+            int p = WordBackward (_cursor);
             if (p == -1)
                 return;
             UpdateCursor(p);
@@ -474,7 +474,7 @@ mismatch:
 
         void CmdForwardWord()
         {
-            int p = WordForward (cursor);
+            int p = WordForward (_cursor);
             if (p == -1)
                 return;
             UpdateCursor(p);
@@ -482,71 +482,71 @@ mismatch:
 
         void CmdRight()
         {
-            if (cursor == text.Length)
+            if (_cursor == _text.Length)
                 return;
 
-            UpdateCursor(cursor + 1);
+            UpdateCursor(_cursor + 1);
         }
 
         void RenderAfter(int p)
         {
             ForceCursor(p);
             RenderFrom(p);
-            ForceCursor(cursor);
+            ForceCursor(_cursor);
         }
 
         void CmdBackspace()
         {
-            if (cursor == 0)
+            if (_cursor == 0)
                 return;
 
-            text.Remove(--cursor, 1);
+            _text.Remove(--_cursor, 1);
             ComputeRendered();
-            RenderAfter(cursor);
+            RenderAfter(_cursor);
         }
 
         void CmdDeleteChar()
         {
             // If there is no input, this behaves like EOF
-            if (text.Length == 0)
+            if (_text.Length == 0)
             {
-                done = true;
-                text = null;
+                _done = true;
+                _text = null;
                 Console.WriteLine();
                 return;
             }
 
-            if (cursor == text.Length)
+            if (_cursor == _text.Length)
                 return;
-            text.Remove(cursor, 1);
+            _text.Remove(_cursor, 1);
             ComputeRendered();
-            RenderAfter(cursor);
+            RenderAfter(_cursor);
         }
 
         int WordForward(int p)
         {
-            if (p >= text.Length)
+            if (p >= _text.Length)
                 return -1;
 
             int i = p;
-            if (Char.IsPunctuation(text[p]) || Char.IsSymbol(text[p]) || Char.IsWhiteSpace(text[p]))
+            if (Char.IsPunctuation(_text[p]) || Char.IsSymbol(_text[p]) || Char.IsWhiteSpace(_text[p]))
             {
-                for (; i < text.Length; i++)
+                for (; i < _text.Length; i++)
                 {
-                    if (Char.IsLetterOrDigit(text[i]))
+                    if (Char.IsLetterOrDigit(_text[i]))
                         break;
                 }
-                for (; i < text.Length; i++)
+                for (; i < _text.Length; i++)
                 {
-                    if (!Char.IsLetterOrDigit(text[i]))
+                    if (!Char.IsLetterOrDigit(_text[i]))
                         break;
                 }
             }
             else
             {
-                for (; i < text.Length; i++)
+                for (; i < _text.Length; i++)
                 {
-                    if (!Char.IsLetterOrDigit(text[i]))
+                    if (!Char.IsLetterOrDigit(_text[i]))
                         break;
                 }
             }
@@ -564,16 +564,16 @@ mismatch:
             if (i == 0)
                 return 0;
 
-            if (Char.IsPunctuation(text[i]) || Char.IsSymbol(text[i]) || Char.IsWhiteSpace(text[i]))
+            if (Char.IsPunctuation(_text[i]) || Char.IsSymbol(_text[i]) || Char.IsWhiteSpace(_text[i]))
             {
                 for (; i >= 0; i--)
                 {
-                    if (Char.IsLetterOrDigit(text[i]))
+                    if (Char.IsLetterOrDigit(_text[i]))
                         break;
                 }
                 for (; i >= 0; i--)
                 {
-                    if (!Char.IsLetterOrDigit(text[i]))
+                    if (!Char.IsLetterOrDigit(_text[i]))
                         break;
                 }
             }
@@ -581,7 +581,7 @@ mismatch:
             {
                 for (; i >= 0; i--)
                 {
-                    if (!Char.IsLetterOrDigit(text[i]))
+                    if (!Char.IsLetterOrDigit(_text[i]))
                         break;
                 }
             }
@@ -595,37 +595,37 @@ mismatch:
 
         void CmdDeleteWord()
         {
-            int pos = WordForward (cursor);
+            int pos = WordForward (_cursor);
 
             if (pos == -1)
                 return;
 
-            string k = text.ToString (cursor, pos-cursor);
+            string k = _text.ToString (_cursor, pos-_cursor);
 
-            if (last_handler == CmdDeleteWord)
-                kill_buffer = kill_buffer + k;
+            if (_lastHandler == CmdDeleteWord)
+                _killBuffer = _killBuffer + k;
             else
-                kill_buffer = k;
+                _killBuffer = k;
 
-            text.Remove(cursor, pos - cursor);
+            _text.Remove(_cursor, pos - _cursor);
             ComputeRendered();
-            RenderAfter(cursor);
+            RenderAfter(_cursor);
         }
 
         void CmdDeleteBackword()
         {
-            int pos = WordBackward (cursor);
+            int pos = WordBackward (_cursor);
             if (pos == -1)
                 return;
 
-            string k = text.ToString (pos, cursor-pos);
+            string k = _text.ToString (pos, _cursor-pos);
 
-            if (last_handler == CmdDeleteBackword)
-                kill_buffer = k + kill_buffer;
+            if (_lastHandler == CmdDeleteBackword)
+                _killBuffer = k + _killBuffer;
             else
-                kill_buffer = k;
+                _killBuffer = k;
 
-            text.Remove(pos, cursor - pos);
+            _text.Remove(pos, _cursor - pos);
             ComputeRendered();
             RenderAfter(pos);
         }
@@ -635,60 +635,60 @@ mismatch:
         //
         void HistoryUpdateLine()
         {
-            history.Update(text.ToString());
+            _history.Update(_text.ToString());
         }
 
         void CmdHistoryPrev()
         {
-            if (!history.PreviousAvailable())
+            if (!_history.PreviousAvailable())
                 return;
 
             HistoryUpdateLine();
 
-            SetText(history.Previous());
+            SetText(_history.Previous());
         }
 
         void CmdHistoryNext()
         {
-            if (!history.NextAvailable())
+            if (!_history.NextAvailable())
                 return;
 
-            history.Update(text.ToString());
-            SetText(history.Next());
+            _history.Update(_text.ToString());
+            SetText(_history.Next());
 
         }
 
-        void CmdKillToEOF()
+        void CmdKillToEof()
         {
-            kill_buffer = text.ToString(cursor, text.Length - cursor);
-            text.Length = cursor;
+            _killBuffer = _text.ToString(_cursor, _text.Length - _cursor);
+            _text.Length = _cursor;
             ComputeRendered();
-            RenderAfter(cursor);
+            RenderAfter(_cursor);
         }
 
         void CmdYank()
         {
-            InsertTextAtCursor(kill_buffer);
+            InsertTextAtCursor(_killBuffer);
         }
 
         void InsertTextAtCursor(string str)
         {
-            int prev_lines = LineCount;
-            text.Insert(cursor, str);
+            int prevLines = LineCount;
+            _text.Insert(_cursor, str);
             ComputeRendered();
-            if (prev_lines != LineCount)
+            if (prevLines != LineCount)
             {
-                Console.SetCursorPosition(0, home_row);
+                Console.SetCursorPosition(0, _homeRow);
                 Render();
-                cursor += str.Length;
-                ForceCursor(cursor);
+                _cursor += str.Length;
+                ForceCursor(_cursor);
             }
             else
             {
-                RenderFrom(cursor);
-                cursor += str.Length;
-                ForceCursor(cursor);
-                UpdateHomeRow(TextToScreenPos(cursor));
+                RenderFrom(_cursor);
+                _cursor += str.Length;
+                ForceCursor(_cursor);
+                UpdateHomeRow(TextToScreenPos(_cursor));
             }
         }
 
@@ -701,31 +701,31 @@ mismatch:
         {
             int p;
 
-            if (cursor == text.Length)
+            if (_cursor == _text.Length)
             {
                 // The cursor is at the end of the string
 
-                p = text.ToString().LastIndexOf(search);
+                p = _text.ToString().LastIndexOf(_search);
                 if (p != -1)
                 {
-                    match_at = p;
-                    cursor = p;
-                    ForceCursor(cursor);
+                    _matchAt = p;
+                    _cursor = p;
+                    ForceCursor(_cursor);
                     return;
                 }
             }
             else
             {
                 // The cursor is somewhere in the middle of the string
-                int start = (cursor == match_at) ? cursor - 1 : cursor;
+                int start = (_cursor == _matchAt) ? _cursor - 1 : _cursor;
                 if (start != -1)
                 {
-                    p = text.ToString().LastIndexOf(search, start);
+                    p = _text.ToString().LastIndexOf(_search, start);
                     if (p != -1)
                     {
-                        match_at = p;
-                        cursor = p;
-                        ForceCursor(cursor);
+                        _matchAt = p;
+                        _cursor = p;
+                        ForceCursor(_cursor);
                         return;
                     }
                 }
@@ -733,10 +733,10 @@ mismatch:
 
             // Need to search backwards in history
             HistoryUpdateLine();
-            string s = history.SearchBackward (search);
+            string s = _history.SearchBackward (_search);
             if (s != null)
             {
-                match_at = -1;
+                _matchAt = -1;
                 SetText(s);
                 ReverseSearch();
             }
@@ -744,22 +744,22 @@ mismatch:
 
         void CmdReverseSearch()
         {
-            if (searching == 0)
+            if (_searching == 0)
             {
-                match_at = -1;
-                last_search = search;
-                searching = -1;
-                search = "";
+                _matchAt = -1;
+                _lastSearch = _search;
+                _searching = -1;
+                _search = "";
                 SetSearchPrompt("");
             }
             else
             {
-                if (search == "")
+                if (_search == "")
                 {
-                    if (last_search != "" && last_search != null)
+                    if (_lastSearch != "" && _lastSearch != null)
                     {
-                        search = last_search;
-                        SetSearchPrompt(search);
+                        _search = _lastSearch;
+                        SetSearchPrompt(_search);
 
                         ReverseSearch();
                     }
@@ -771,16 +771,16 @@ mismatch:
 
         void SearchAppend(char c)
         {
-            search = search + c;
-            SetSearchPrompt(search);
+            _search = _search + c;
+            SetSearchPrompt(_search);
 
             //
             // If the new typed data still matches the current text, stay here
             //
-            if (cursor < text.Length)
+            if (_cursor < _text.Length)
             {
-                string r = text.ToString (cursor, text.Length - cursor);
-                if (r.StartsWith(search))
+                string r = _text.ToString (_cursor, _text.Length - _cursor);
+                if (r.StartsWith(_search))
                     return;
             }
 
@@ -790,9 +790,9 @@ mismatch:
         void CmdRefresh()
         {
             Console.Clear();
-            max_rendered = 0;
+            _maxRendered = 0;
             Render();
-            ForceCursor(cursor);
+            ForceCursor(_cursor);
         }
 
         void InterruptEdit(object sender, ConsoleCancelEventArgs a)
@@ -805,15 +805,15 @@ mismatch:
         }
         private void Reset()
         {
-            searching = 0;
+            _searching = 0;
             Console.WriteLine();
-            SetPrompt(prompt);
+            SetPrompt(_prompt);
             SetText("");
         }
 
         void HandleChar(char c)
         {
-            if (searching != 0)
+            if (_searching != 0)
                 SearchAppend(c);
             else
                 InsertChar(c);
@@ -823,7 +823,7 @@ mismatch:
         {
             ConsoleKeyInfo cki;
 
-            while (!done)
+            while (!_done)
             {
                 ConsoleModifiers mod;
 
@@ -839,33 +839,33 @@ mismatch:
 
                 bool handled = false;
 
-                foreach (Handler handler in handlers)
+                foreach (Handler handler in _handlers)
                 {
-                    ConsoleKeyInfo t = handler.CKI;
+                    ConsoleKeyInfo t = handler.Cki;
 
                     if (t.Key == cki.Key && t.Modifiers == mod)
                     {
                         handled = true;
                         handler.KeyHandler();
-                        last_handler = handler.KeyHandler;
+                        _lastHandler = handler.KeyHandler;
                         break;
                     }
                     else if (t.KeyChar == cki.KeyChar && t.Key == ConsoleKey.F24)
                     {
                         handled = true;
                         handler.KeyHandler();
-                        last_handler = handler.KeyHandler;
+                        _lastHandler = handler.KeyHandler;
                         break;
                     }
                 }
                 if (handled)
                 {
-                    if (searching != 0)
+                    if (_searching != 0)
                     {
-                        if (last_handler != CmdReverseSearch)
+                        if (_lastHandler != CmdReverseSearch)
                         {
-                            searching = 0;
-                            SetPrompt(prompt);
+                            _searching = 0;
+                            SetPrompt(_prompt);
                         }
                     }
                     continue;
@@ -878,70 +878,70 @@ mismatch:
 
         void InitText(string initial)
         {
-            text = new StringBuilder(initial);
+            _text = new StringBuilder(initial);
             ComputeRendered();
-            cursor = text.Length;
+            _cursor = _text.Length;
             Render();
-            ForceCursor(cursor);
+            ForceCursor(_cursor);
         }
 
         void SetText(string newtext)
         {
-            Console.SetCursorPosition(0, home_row);
+            Console.SetCursorPosition(0, _homeRow);
             InitText(newtext);
         }
 
         void SetPrompt(string newprompt)
         {
-            shown_prompt = newprompt;
-            Console.SetCursorPosition(0, home_row);
+            _shownPrompt = newprompt;
+            Console.SetCursorPosition(0, _homeRow);
             Render();
-            ForceCursor(cursor);
+            ForceCursor(_cursor);
         }
 
         public string Edit(string prompt, string initial)
         {
-            edit_thread = Thread.CurrentThread;
-            searching = 0;
+            _editThread = Thread.CurrentThread;
+            _searching = 0;
             Console.CancelKeyPress += InterruptEdit;
 
-            done = false;
-            history.CursorToEnd();
-            max_rendered = 0;
+            _done = false;
+            _history.CursorToEnd();
+            _maxRendered = 0;
 
             Prompt = prompt;
-            shown_prompt = prompt;
+            _shownPrompt = prompt;
             InitText(initial);
-            history.Append(initial);
+            _history.Append(initial);
 
             do
             {
                 EditLoop();
-            } while (!done);
+            } while (!_done);
             Console.WriteLine();
 
             Console.CancelKeyPress -= InterruptEdit;
 
-            if (text == null)
+            if (_text == null)
             {
-                history.Close();
+                _history.Close();
                 return null;
             }
 
-            string result = text.ToString ();
+            string result = _text.ToString ();
             if (result != "")
-                history.Accept(result);
+                _history.Accept(result);
             else
-                history.RemoveLast();
+                _history.RemoveLast();
 
             return result;
         }
 
         public void SaveHistory()
         {
-            if (history != null)
+            if (_history != null)
             {
-                history.Close();
+                _history.Close();
             }
         }
 
@@ -953,10 +953,10 @@ mismatch:
         //
         class History
         {
-            readonly string [] history;
-            int head, tail;
-            int cursor, count;
-            readonly string histfile;
+            readonly string [] _history;
+            int _head, _tail;
+            int _cursor, _count;
+            readonly string _histfile;
 
             public History(string app, int size)
             {
@@ -971,19 +971,19 @@ mismatch:
                             Directory.CreateDirectory( dir );
                         }
                         catch {
-                            app = "./";
+                            app = null;
                         }
                     }
-
-                    histfile = Path.Combine (dir, app) + ".jlisp-history";
+                    if(app != null)
+                        _histfile = Path.Combine (dir, app) + ".jlisp-history";
                 }
 
-                history = new string[size];
-                head = tail = cursor = 0;
+                _history = new string[size];
+                _head = _tail = _cursor = 0;
 
-                if (File.Exists(histfile))
+                if (File.Exists(_histfile))
                 {
-                    using (StreamReader sr = File.OpenText(histfile))
+                    using (StreamReader sr = File.OpenText(_histfile))
                     {
                         string line;
 
@@ -998,18 +998,18 @@ mismatch:
 
             public void Close()
             {
-                if (histfile == null)
+                if (_histfile == null)
                     return;
 
                 try
                 {
-                    using (StreamWriter sw = File.CreateText(histfile))
+                    using (StreamWriter sw = File.CreateText(_histfile))
                     {
-                        int start = (count == history.Length) ? head : tail;
-                        for (int i = start; i < start + count; i++)
+                        int start = (_count == _history.Length) ? _head : _tail;
+                        for (int i = start; i < start + _count; i++)
                         {
-                            int p = i % history.Length;
-                            sw.WriteLine(history[p]);
+                            int p = i % _history.Length;
+                            sw.WriteLine(_history[p]);
                         }
                     }
                 }
@@ -1025,12 +1025,12 @@ mismatch:
             public void Append(string s)
             {
                 //Console.WriteLine ("APPENDING {0} head={1} tail={2}", s, head, tail);
-                history[head] = s;
-                head = (head + 1) % history.Length;
-                if (head == tail)
-                    tail = (tail + 1 % history.Length);
-                if (count != history.Length)
-                    count++;
+                _history[_head] = s;
+                _head = (_head + 1) % _history.Length;
+                if (_head == _tail)
+                    _tail = (_tail + 1 % _history.Length);
+                if (_count != _history.Length)
+                    _count++;
                 //Console.WriteLine ("DONE: head={1} tail={2}", s, head, tail);
             }
 
@@ -1041,35 +1041,35 @@ mismatch:
             //
             public void Update(string s)
             {
-                history[cursor] = s;
+                _history[_cursor] = s;
             }
 
             public void RemoveLast()
             {
-                head = head - 1;
-                if (head < 0)
-                    head = history.Length - 1;
+                _head = _head - 1;
+                if (_head < 0)
+                    _head = _history.Length - 1;
             }
 
             public void Accept(string s)
             {
-                int t = head-1;
+                int t = _head-1;
                 if (t < 0)
-                    t = history.Length - 1;
+                    t = _history.Length - 1;
 
-                history[t] = s;
+                _history[t] = s;
             }
 
             public bool PreviousAvailable()
             {
                 //Console.WriteLine ("h={0} t={1} cursor={2}", head, tail, cursor);
-                if (count == 0)
+                if (_count == 0)
                     return false;
-                int next = cursor-1;
+                int next = _cursor-1;
                 if (next < 0)
-                    next = count - 1;
+                    next = _count - 1;
 
-                if (next == head)
+                if (next == _head)
                     return false;
 
                 return true;
@@ -1077,10 +1077,10 @@ mismatch:
 
             public bool NextAvailable()
             {
-                if (count == 0)
+                if (_count == 0)
                     return false;
-                int next = (cursor + 1) % history.Length;
-                if (next == head)
+                int next = (_cursor + 1) % _history.Length;
+                if (next == _head)
                     return false;
                 return true;
             }
@@ -1095,11 +1095,11 @@ mismatch:
                 if (!PreviousAvailable())
                     return null;
 
-                cursor--;
-                if (cursor < 0)
-                    cursor = history.Length - 1;
+                _cursor--;
+                if (_cursor < 0)
+                    _cursor = _history.Length - 1;
 
-                return history[cursor];
+                return _history[_cursor];
             }
 
             public string Next()
@@ -1107,41 +1107,41 @@ mismatch:
                 if (!NextAvailable())
                     return null;
 
-                cursor = (cursor + 1) % history.Length;
-                return history[cursor];
+                _cursor = (_cursor + 1) % _history.Length;
+                return _history[_cursor];
             }
 
             public void CursorToEnd()
             {
-                if (head == tail)
+                if (_head == _tail)
                     return;
 
-                cursor = head;
+                _cursor = _head;
             }
 
             public void Dump()
             {
-                Console.WriteLine("Head={0} Tail={1} Cursor={2} count={3}", head, tail, cursor, count);
-                for (int i = 0; i < history.Length; i++)
+                Console.WriteLine("Head={0} Tail={1} Cursor={2} count={3}", _head, _tail, _cursor, _count);
+                for (int i = 0; i < _history.Length; i++)
                 {
-                    Console.WriteLine(" {0} {1}: {2}", i == cursor ? "==>" : "   ", i, history[i]);
+                    Console.WriteLine(" {0} {1}: {2}", i == _cursor ? "==>" : "   ", i, _history[i]);
                 }
                 //log.Flush ();
             }
 
             public string SearchBackward(string term)
             {
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < _count; i++)
                 {
-                    int slot = cursor-i-1;
+                    int slot = _cursor-i-1;
                     if (slot < 0)
-                        slot = history.Length + slot;
-                    if (slot >= history.Length)
+                        slot = _history.Length + slot;
+                    if (slot >= _history.Length)
                         slot = 0;
-                    if (history[slot] != null && history[slot].IndexOf(term) != -1)
+                    if (_history[slot] != null && _history[slot].IndexOf(term) != -1)
                     {
-                        cursor = slot;
-                        return history[slot];
+                        _cursor = slot;
+                        return _history[slot];
                     }
                 }
 

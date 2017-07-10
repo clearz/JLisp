@@ -8,4 +8,9 @@
     <StartupObject />
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <Optimize>False</Optimize>
+    <DefineConstants>TRACE;DEBUG;NETCOREAPP1_1</DefineConstants>
+  </PropertyGroup>
+
 </Project>
