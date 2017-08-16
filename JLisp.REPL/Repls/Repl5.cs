@@ -25,11 +25,11 @@ namespace JLisp.Tests.Repls
             else if (ast is JlList)
             {
                 JlList oldLst = (JlList)ast;
-                JlList newLst = ast.ListQ() ? new JlList()
+                JlList newLst = ast.IsList ? new JlList()
                     : (JlList)new JlVector();
                 foreach (JlValue mv in oldLst.Value)
                 {
-                    newLst.ConjBang(Eval(mv, env));
+                    newLst.AddRange(Eval(mv, env));
                 }
                 return newLst;
             }
@@ -58,14 +58,14 @@ namespace JLisp.Tests.Repls
             {
 
                 //Console.WriteLine("EVAL: " + Printer.PrintStr(orig_ast, true));
-                if (!origAst.ListQ())
+                if (!origAst.IsList)
                 {
                     return eval_ast(origAst, env);
                 }
 
                 // Apply list
                 JlList ast = (JlList)origAst;
-                if (ast.Size == 0) { return ast; }
+                if (ast.Count == 0) { return ast; }
                 a0 = ast[0];
 
                 String a0Sym = a0 is JlSymbol ? ((JlSymbol)a0).Name
@@ -85,7 +85,7 @@ namespace JLisp.Tests.Repls
                         JlSymbol key;
                         JlValue val;
                         Env letEnv = new Env(env);
-                        for (int i = 0; i < ((JlList)a1).Size; i += 2)
+                        for (int i = 0; i < ((JlList)a1).Count; i += 2)
                         {
                             key = (JlSymbol)((JlList)a1)[i];
                             val = ((JlList)a1)[i + 1];
@@ -95,8 +95,8 @@ namespace JLisp.Tests.Repls
                         env = letEnv;
                         break;
                     case "do":
-                        eval_ast(ast.Slice(1, ast.Size - 1), env);
-                        origAst = ast[ast.Size - 1];
+                        eval_ast(ast.Slice(1, ast.Count - 1), env);
+                        origAst = ast[ast.Count - 1];
                         break;
                     case "if":
                         a1 = ast[1];
@@ -104,7 +104,7 @@ namespace JLisp.Tests.Repls
                         if (cond == Nil || cond == False)
                         {
                             // eval false slot form
-                            if (ast.Size > 3)
+                            if (ast.Count > 3)
                             {
                                 origAst = ast[3];
                             }
@@ -132,11 +132,11 @@ namespace JLisp.Tests.Repls
                         if (fnast != null)
                         {
                             origAst = fnast;
-                            env = f.GenEnv(el.Rest());
+                            env = f.CreateChildEnv(el.GetTail());
                         }
                         else
                         {
-                            return f.Apply(el.Rest());
+                            return f.Invoke(el.GetTail());
                         }
                         break;
                 }

@@ -12,7 +12,7 @@ namespace JLisp.Parsing
         public Env(Env outer) { _outer = outer; Enviornments.Add( this ); }
 
         public Env(Env outer, JlList binds, JlList exprs) : this( outer ) {
-            for ( int i = 0; i < binds.Size; i++ ) {
+            for ( int i = 0; i < binds.Count; i++ ) {
                 string sym = ((JlSymbol)binds[i]).Name;
                 if ( sym == "&" ) {
                     _data[((JlSymbol)binds[i+1]).Name] = exprs.Slice( i );

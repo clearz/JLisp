@@ -79,7 +79,7 @@ namespace JLisp.Parsing
         {
             var token = rdr.Next();
             while((token = rdr.Peek()) != null && token[0] != end)
-                lst.ConjBang(ReadForm(rdr));
+                lst.AddRange(ReadForm(rdr));
 
             if (token == null)
                 throw new ParseError($"expected '{end}' get EOF");

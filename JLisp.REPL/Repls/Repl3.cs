@@ -22,11 +22,11 @@ namespace JLisp.Tests.Repls
             else if (ast is JlList)
             {
                 JlList oldLst = (JlList)ast;
-                JlList newLst = ast.ListQ() ? new JlList()
+                JlList newLst = ast.IsList ? new JlList()
                     : (JlList)new JlVector();
                 foreach (JlValue mv in oldLst.Value)
                 {
-                    newLst.ConjBang(Eval(mv, env));
+                    newLst.AddRange(Eval(mv, env));
                 }
                 return newLst;
             }
@@ -51,14 +51,14 @@ namespace JLisp.Tests.Repls
             JlValue a0, a1, a2, res;
             JlList el;
             //Console.WriteLine("EVAL: " + Printer.PrintStr(orig_ast, true));
-            if (!origAst.ListQ())
+            if (!origAst.IsList)
             {
                 return eval_ast(origAst, env);
             }
 
             // Apply list
             JlList ast = (JlList)origAst;
-            if (ast.Size == 0) { return ast; }
+            if (ast.Count == 0) { return ast; }
             a0 = ast[0];
             if (!(a0 is JlSymbol))
             {
@@ -80,7 +80,7 @@ namespace JLisp.Tests.Repls
                     JlSymbol key;
                     JlValue val;
                     Env letEnv = new Env(env);
-                    for (int i = 0; i < ((JlList)a1).Size; i += 2)
+                    for (int i = 0; i < ((JlList)a1).Count; i += 2)
                     {
                         key = (JlSymbol)((JlList)a1)[i];
                         val = ((JlList)a1)[i + 1];
@@ -90,7 +90,7 @@ namespace JLisp.Tests.Repls
                 default:
                     el = (JlList)eval_ast(ast, env);
                     var f = (JlFunction)el[0];
-                    return f.Apply(el.Rest());
+                    return f.Invoke(el.GetTail());
             }
         }
 

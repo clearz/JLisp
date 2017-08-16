@@ -71,7 +71,7 @@ namespace JLisp
         // eval
         public static bool is_pair(JlValue x)
         {
-            return x is JlList && ((JlList)x).Size > 0;
+            return x is JlList && ((JlList)x).Count > 0;
         }
 
         public static JlValue Quasiquote(JlValue ast)
@@ -96,12 +96,12 @@ namespace JLisp
                     {
                         return new JlList(new JlSymbol("concat"),
                             ((JlList)a0)[1],
-                            Quasiquote(((JlList)ast).Rest()));
+                            Quasiquote(((JlList)ast).GetTail()));
                     }
                 }
                 return new JlList(new JlSymbol("cons"),
                     Quasiquote(a0),
-                    Quasiquote(((JlList)ast).Rest()));
+                    Quasiquote(((JlList)ast).GetTail()));
             }
         }
 
@@ -130,7 +130,7 @@ namespace JLisp
             {
                 JlSymbol a0 = (JlSymbol)((JlList)ast)[0];
                 JlFunction mac = (JlFunction)env.Get(a0);
-                ast = mac.Apply(((JlList)ast).Rest());
+                ast = mac.Invoke(((JlList)ast).GetTail());
             }
             return ast;
         }
@@ -144,11 +144,11 @@ namespace JLisp
             else if (ast is JlList)
             {
                 JlList oldLst = (JlList)ast;
-                JlList newLst = ast.ListQ() ? new JlList()
+                JlList newLst = ast.IsList ? new JlList()
                     : (JlList)new JlVector();
                 foreach (JlValue mv in oldLst.Value)
                 {
-                    newLst.ConjBang(Eval(mv, env));
+                    newLst.AddRange(Eval(mv, env));
                 }
                 return newLst;
             }
@@ -177,20 +177,20 @@ namespace JLisp
             {
 
                 //Console.WriteLine("EVAL: " + Printer.PrintStr(orig_ast, true));
-                if (!origAst.ListQ())
+                if (!origAst.IsList)
                 {
                     return eval_ast(origAst, env);
                 }
 
                 // Apply list
                 JlValue expanded = Macroexpand(origAst, env);
-                if (!expanded.ListQ())
+                if (!expanded.IsList)
                 {
                     return eval_ast(expanded, env);
                 }
                 JlList ast = (JlList)expanded;
 
-                if (ast.Size == 0) { return ast; }
+                if (ast.Count == 0) { return ast; }
                 a0 = ast[0];
 
                 String a0Sym = a0 is JlSymbol ? ((JlSymbol)a0).Name
@@ -210,7 +210,7 @@ namespace JLisp
                         JlSymbol key;
                         JlValue val;
                         Env letEnv = new Env(env);
-                        for (int i = 0; i < ((JlList)a1).Size; i += 2)
+                        for (int i = 0; i < ((JlList)a1).Count; i += 2)
                         {
                             key = (JlSymbol)((JlList)a1)[i];
                             val = ((JlList)a1)[i + 1];
@@ -228,7 +228,7 @@ namespace JLisp
                         a1 = ast[1];
                         a2 = ast[2];
                         res = Eval(a2, env);
-                        ((JlFunction)res).SetMacro();
+                        ((JlFunction)res).IsMacro = true;
                         env.Set(((JlSymbol)a1), res);
                         return res;
                     case "macroexpand":
@@ -241,7 +241,7 @@ namespace JLisp
                         }
                         catch (Exception e)
                         {
-                            if (ast.Size > 2)
+                            if (ast.Count > 2)
                             {
                                 JlValue exc;
                                 a2 = ast[2];
@@ -264,8 +264,8 @@ namespace JLisp
                             throw e;
                         }
                     case "do":
-                        eval_ast(ast.Slice(1, ast.Size - 1), env);
-                        origAst = ast[ast.Size - 1];
+                        eval_ast(ast.Slice(1, ast.Count - 1), env);
+                        origAst = ast[ast.Count - 1];
                         break;
                     case "if":
                         a1 = ast[1];
@@ -273,7 +273,7 @@ namespace JLisp
                         if (cond == Nil || cond == False)
                         {
                             // eval false slot form
-                            if (ast.Size > 3)
+                            if (ast.Count > 3)
                             {
                                 origAst = ast[3];
                             }
@@ -301,11 +301,11 @@ namespace JLisp
                         if (fnast != null)
                         {
                             origAst = fnast;
-                            env = f.GenEnv(el.Rest());
+                            env = f.CreateChildEnv(el.GetTail());
                         }
                         else
                         {
-                            return f.Apply(el.Rest());
+                            return f.Invoke(el.GetTail());
                         }
                         break;
                 }
@@ -337,8 +337,8 @@ namespace JLisp
             // core.mal: defined using the language itself
             Re("(def! not (fn* (a) (if a false true)))");
             Re("(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f) \")\")))))");
-            Re("(defmacro! cond (fn* (& xs) (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (Rest (Rest xs)))))))");
-            Re("(defmacro! or (fn* (& xs) (if (empty? xs) nil (if (= 1 (count xs)) (first xs) `(let* (or_FIXME ~(first xs)) (if or_FIXME or_FIXME (or ~@(Rest xs))))))))");
+            Re("(defmacro! cond (fn* (& xs) (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (GetTail (GetTail xs)))))))");
+            Re("(defmacro! or (fn* (& xs) (if (empty? xs) nil (if (= 1 (count xs)) (first xs) `(let* (or_FIXME ~(first xs)) (if or_FIXME or_FIXME (or ~@(GetTail xs))))))))");
 
         }
         // repl

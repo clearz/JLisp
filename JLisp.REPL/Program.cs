@@ -8,11 +8,11 @@ namespace JLisp.REPL
 {
     static class ConsoleREPL
     {
-        const string Heading = "JLisp v 0.7.3, By John Cleary.";
+        const string Heading = "JLisp v 0.7.4, By John Cleary.";
 
         static string Format(JlValue exp)
         {
-            return Printer.PrintStr(exp, true);// + $", Type: {exp.GetType().Name}";
+            return Printer.PrintStr(exp, true);
         }
 
         static void Main(string[] args)

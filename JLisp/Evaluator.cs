@@ -11,7 +11,7 @@ namespace JLisp
     public class Evaluator
     {
         public static Env EnvRoot { get; private set; }
-        static bool IsPair(JlValue x) => x is JlList && ((JlList)x).Size > 0;
+        static bool IsPair(JlValue x) => x is JlList && ((JlList)x).Count > 0;
 
         static JlValue QuasiQuote(JlValue ast)
         {
@@ -20,8 +20,8 @@ namespace JLisp
             JlValue a0 = ((JlList)ast)[0];
             if (a0 is JlSymbol s && s.Name == "unquote") return ((JlList)ast)[1];
             if (IsPair(a0) && ((JlList)a0)[0] is JlSymbol s1 && s1.Name == "splice-unquote")
-                return new JlList(new JlSymbol("concat"), ((JlList)a0)[1], QuasiQuote(((JlList)ast).Rest()));
-            return new JlList(new JlSymbol("cons"), QuasiQuote(a0), QuasiQuote(((JlList)ast).Rest()));
+                return new JlList(new JlSymbol("concat"), ((JlList)a0)[1], QuasiQuote(((JlList)ast).GetTail()));
+            return new JlList(new JlSymbol("cons"), QuasiQuote(a0), QuasiQuote(((JlList)ast).GetTail()));
         }
 
         static bool IsMacroCall(JlValue ast, Env env)
@@ -44,7 +44,7 @@ namespace JLisp
             {
                 JlSymbol a0 = (JlSymbol)((JlList)ast)[0];
                 JlFunction mac = (JlFunction)env.Get(a0.Name);
-                ast = mac.Apply(((JlList)ast).Rest());
+                ast = mac.Invoke(((JlList)ast).GetTail());
             }
             return ast;
         }
@@ -54,9 +54,9 @@ namespace JLisp
             if (ast is JlSymbol sym) return env.Get(sym.Name);
             if (ast is JlList oldLst)
             {
-                var newLst = ast.ListQ() ? new JlList() : new JlVector();
+                var newLst = ast.IsList ? new JlList() : new JlVector();
                 foreach (var jv in oldLst.Value)
-                    newLst.ConjBang(InnerEvaluate(jv, env));
+                    newLst.AddRange(InnerEvaluate(jv, env));
                 return newLst;
             }
             if (ast is JlHashMap map)
@@ -77,12 +77,12 @@ namespace JLisp
             JlList el;
             while (true)
             {
-                if (!origAst.ListQ()) return EvalAst(origAst, env);
+                if (!origAst.IsList) return EvalAst(origAst, env);
                 JlValue expanded = MacroExpand(origAst, env);
-                if (!expanded.ListQ()) return EvalAst(expanded, env);
+                if (!expanded.IsList) return EvalAst(expanded, env);
 
                 var ast = (JlList)expanded;
-                if (ast.Size == 0) return ast;
+                if (ast.Count == 0) return ast;
                 a0 = ast[0];
                 string a0Sym = a0 is JlSymbol sym ? sym.Name : "__<*fn*>__";
 
@@ -98,7 +98,7 @@ namespace JLisp
                         a1 = ast[1];
                         a2 = ast[2];
                         var letEnv = new Env(env);
-                        for (int i = 0; i < ((JlList)a1).Size; i += 2)
+                        for (int i = 0; i < ((JlList)a1).Count; i += 2)
                         {
                             var key = (JlSymbol)((JlList)a1)[i];
                             var val = ((JlList)a1)[i + 1];
@@ -116,7 +116,7 @@ namespace JLisp
                         a1 = ast[1];
                         a2 = ast[2];
                         res = InnerEvaluate(a2, env);
-                        ((JlFunction)res).SetMacro();
+                        ((JlFunction)res).IsMacro = true;
                         env.Set(((JlSymbol)a1), res);
                         return res;
                     case "macroexpand":
@@ -129,7 +129,7 @@ namespace JLisp
                         }
                         catch (Exception e)
                         {
-                            if (ast.Size > 2)
+                            if (ast.Count > 2)
                             {
                                 JlValue exc;
                                 a2 = ast[2];
@@ -148,15 +148,15 @@ namespace JLisp
                             throw e;
                         }
                     case "do":
-                        EvalAst(ast.Rest(), env);
-                        origAst = ast[ast.Size - 1];
+                        EvalAst(ast.GetTail(), env);
+                        origAst = ast[ast.Count - 1];
                         break;
                     case "if":
                         a1 = ast[1];
                         var cond = InnerEvaluate(a1, env);
                         if (cond == Nil || cond == False)
                         {
-                            if (ast.Size > 3)
+                            if (ast.Count > 3)
                                 origAst = ast[3];
                             else return Nil;
                         }
@@ -175,10 +175,10 @@ namespace JLisp
                             if (fnast != null)
                             {
                                 origAst = fnast;
-                                env = f.GenEnv(el.Rest());
+                                env = f.CreateChildEnv(el.GetTail());
                             }
                             else
-                                return f.Apply(el.Rest());
+                                return f.Invoke(el.GetTail());
                         }
                         else throw new ParseError($"Unknown Type Got '{el}'");
                         break;

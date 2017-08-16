@@ -89,12 +89,12 @@ namespace JLisp.Parsing.Functions
         private static readonly Func Assoc = F(a =>
         {
             var newHm = ((JlHashMap)a[0]).Copy();
-            return newHm.AssocBang(a.Slice(1));
+            return newHm.Add(a.Slice(1));
         });
         private static readonly Func Dissoc = F(a =>
         {
             var newHm = ((JlHashMap)a[0]).Copy();
-            return newHm.DissocBang(a.Slice(1));
+            return newHm.Remove(a.Slice(1));
         });
         private static readonly Func Get = F(a =>
         {
@@ -109,7 +109,7 @@ namespace JLisp.Parsing.Functions
             var dict = ((JlHashMap)a[0]).Value;
             var keyList = new JlList();
             foreach (var key in dict.Keys)
-                keyList.ConjBang(key);
+                keyList.AddRange(key);
             return keyList;
         });
         private static readonly Func Vals = F(a =>
@@ -117,7 +117,7 @@ namespace JLisp.Parsing.Functions
             var dict = ((JlHashMap)a[0]).Value;
             var valList = new JlList();
             foreach (var val in dict.Values)
-                valList.ConjBang(val);
+                valList.AddRange(val);
             return valList;
         });
 
@@ -127,7 +127,7 @@ namespace JLisp.Parsing.Functions
         private static readonly Func Nth = F(a =>
         {
             var idx = (JlInteger) a[1];
-            if (idx < ((JlList) a[0]).Size)
+            if (idx < ((JlList) a[0]).Count)
                 return ((JlList) a[0])[idx];
 
             throw new JlException("nth: index out of range");
@@ -142,18 +142,18 @@ namespace JLisp.Parsing.Functions
 
         private static readonly Func Concat = F(a =>
         {
-            if (a.Size == 0) return new JlList();
+            if (a.Count == 0) return new JlList();
             var lst = new List<JlValue>();
             lst.AddRange(((JlList) a[0]).Value);
-            for (int i = 1; i < a.Size; i++)
+            for (int i = 1; i < a.Count; i++)
                 lst.AddRange(((JlList) a[i]).Value);
             return new JlList(lst) as JlValue;
 
         });
         private static readonly Func First = F(a => a[0] == Nil ? Nil : ((JlList) a[0])[0]);
-        private static readonly Func Rest = F(a => a[0] == Nil ? new JlList() : ((JlList) a[0]).Rest());
-        private static readonly Func EmptyQ = F(a => a[0] == Nil ? (JlValue) Nil : ((JlList)a[0]).Size == 0);
-        private static readonly Func Count = F(a => a[0] == Nil ? (JlValue)Nil : ((JlList)a[0]).Size);
+        private static readonly Func GetTail = F(a => a[0] == Nil ? new JlList() : ((JlList) a[0]).GetTail());
+        private static readonly Func EmptyQ = F(a => a[0] == Nil ? (JlValue) Nil : ((JlList)a[0]).Count == 0);
+        private static readonly Func Count = F(a => a[0] == Nil ? (JlValue)Nil : ((JlList)a[0]).Count);
         private static readonly Func ConJ = F(a =>
         {
             var srcLst = ((JlList) a[0]).Value;
@@ -161,11 +161,11 @@ namespace JLisp.Parsing.Functions
             newLst.AddRange(srcLst);
             if (a[0] is JlVector)
             {
-                for (int i = 1; i < a.Size; i++)
+                for (int i = 1; i < a.Count; i++)
                     newLst.Add(a[i]);
                 return new JlVector(newLst);
             }
-            for (int i = 1; i < a.Size; i++)
+            for (int i = 1; i < a.Count; i++)
                 newLst.Insert(0, a[i]);
             return new JlList(newLst);
         });
@@ -174,9 +174,9 @@ namespace JLisp.Parsing.Functions
         {
             if (a[0] == Nil) return Nil;
             if (a[0] is JlVector)
-                return ((JlVector)a[0]).Size == 0 ? (JlValue)Nil : new JlList(((JlVector) a[0]).Value);
+                return ((JlVector)a[0]).Count == 0 ? (JlValue)Nil : new JlList(((JlVector) a[0]).Value);
             if(a[0] is JlList)
-                return ((JlList)a[0]).Size == 0 ? (JlValue)Nil : a[0];
+                return ((JlList)a[0]).Count == 0 ? (JlValue)Nil : a[0];
             if (a[0] is JlString)
             {
                 var s = ((JlString) a[0]).Value;
@@ -196,16 +196,16 @@ namespace JLisp.Parsing.Functions
         {
             var f = (JlFunction)a[0];
             var lst = new List<JlValue>();
-            lst.AddRange(a.Slice(1, a.Size - 1).Value);
-            lst.AddRange(((JlList)a[a.Size - 1]).Value);
-            return f.Apply(new JlList(lst));
+            lst.AddRange(a.Slice(1, a.Count - 1).Value);
+            lst.AddRange(((JlList)a[a.Count - 1]).Value);
+            return f.Invoke(new JlList(lst));
         });
 
         private static readonly Func Map = F(a =>
         {
             var f = (JlFunction)a[0];
             var srcLst = ((JlList)a[1]).Value;
-            return new JlList(srcLst.Select(t => f.Apply(new JlList(t))));
+            return new JlList(srcLst.Select(t => f.Invoke(new JlList(t))));
         });
         // Metadata Functions
         private static readonly Func Meta = F(a => a[0].Meta);
@@ -221,7 +221,7 @@ namespace JLisp.Parsing.Functions
             var f = (JlFunction) a[1];
             var newLst = new List<JlValue> {atm.Value};
             newLst.AddRange(a.Slice(2).Value);
-            return atm.Value = f.Apply(new JlList(newLst));
+            return atm.Value = f.Invoke(new JlList(newLst));
         });
 
         // Number Functions
@@ -276,7 +276,7 @@ namespace JLisp.Parsing.Functions
                 ["concat"] = Concat,
                 ["nth"] = Nth,
                 ["first"] = First,
-                ["rest"] = Rest,
+                ["rest"] = GetTail,
                 ["count"] = Count,
                 ["empty?"] = EmptyQ,
                 ["conj"] = ConJ,
@@ -294,14 +294,14 @@ namespace JLisp.Parsing.Functions
 
             };
         class Print : Func {
-            public override JlValue Apply(JlList args) {
+            public override JlValue Invoke(JlList args) {
                 Console.Write( Printer.PrintStrArgs( args, " ", true) + "\n");
                 return Nil;
             }
         }
 
         class PrintLine : Func {
-            public override JlValue Apply(JlList args)
+            public override JlValue Invoke(JlList args)
             {
                 System.Diagnostics.Debugger.Launch();
                 Console.Write( Printer.PrintStrArgs( args, " ", false ) + "\n");
